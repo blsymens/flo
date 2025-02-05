@@ -4,25 +4,46 @@ import plotly.graph_objs as go
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+from dotenv import load_dotenv
+from azure.storage.blob import BlobServiceClient
+import io
+
+load_dotenv()  # Load environment variables
 
 app = dash.Dash(__name__)
-
 server = app.server
 
-data_dir = 'data'
-if not os.path.exists(data_dir):
-    os.makedirs(data_dir)
+# Azure Blob Storage setup
+connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
+container_name = os.getenv('AZURE_CONTAINER_NAME')
+blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+container_client = blob_service_client.get_container_client(container_name)
 
-data_file = os.path.join(data_dir, 'baby_growth_data.csv')
-if os.path.exists(data_file):
-    df = pd.read_csv(data_file)
+# Function to read CSV from Azure Blob Storage
+def read_csv_from_blob(blob_name):
+    blob_client = container_client.get_blob_client(blob_name)
+    download_stream = blob_client.download_blob()
+    return pd.read_csv(io.StringIO(download_stream.content_as_text()))
+
+# Function to write CSV to Azure Blob Storage
+def write_csv_to_blob(df, blob_name):
+    output = io.StringIO()
+    df.to_csv(output, index=False)
+    output.seek(0)
+    blob_client = container_client.get_blob_client(blob_name)
+    blob_client.upload_blob(output.getvalue(), overwrite=True)
+
+# Load data
+baby_growth_blob = 'data/baby_growth_data.csv'
+who_data_blob = 'data/tab_wfa_girls_p_0_13.csv'
+
+try:
+    df = read_csv_from_blob(baby_growth_blob)
     df['Date'] = pd.to_datetime(df['Date'])
-else:
+except:
     df = pd.DataFrame(columns=['Date', 'Age_Days', 'Weight_kg'])
 
-# Load WHO data
-data_file = os.path.join(data_dir, 'tab_wfa_girls_p_0_13.csv')
-who_data = pd.read_csv(data_file)
+who_data = read_csv_from_blob(who_data_blob)
 
 # Process the data to get the percentiles you need
 percentiles = {
@@ -93,12 +114,12 @@ def update_data_and_chart(add_clicks, save_clicks, table_data, dob, date, weight
         
         new_record = pd.DataFrame({'Date': [measurement_date], 'Age_Days': [age_days], 'Weight_kg': [weight]})
         df = pd.concat([df, new_record], ignore_index=True)
-        df.to_csv(data_file, index=False)
+        write_csv_to_blob(df, baby_growth_blob)
         message = "Record added successfully!"
     elif trigger_id == 'save-button' or trigger_id == 'data-table':
         df = pd.DataFrame(table_data)
         df['Date'] = pd.to_datetime(df['Date'])
-        df.to_csv(data_file, index=False)
+        write_csv_to_blob(df, baby_growth_blob)
         message = "Changes saved successfully!"
     else:
         message = "No changes made."
