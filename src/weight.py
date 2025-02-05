@@ -30,7 +30,7 @@ percentiles = {
     '10th': who_data['P10'].tolist(),
     '50th': who_data['P50'].tolist(),
     '90th': who_data['P90'].tolist(),
-    '95th': who_data['P95'].tolist(),g
+    '95th': who_data['P95'].tolist()
 }
 
 days = (who_data['Week']*7).tolist()
