@@ -1,0 +1,163 @@
+import dash
+from dash import dcc, html, Input, Output, State, dash_table
+import plotly.graph_objs as go
+import pandas as pd
+from datetime import datetime, timedelta
+import os
+
+app = dash.Dash(__name__)
+server = app.server  # Add this line for deployment
+
+# Use environment variable for data file path, with a default
+data_file = os.environ.get('DATA_FILE', 'data/baby_growth_data.csv')
+
+# Initialize DataFrame
+if os.path.exists(data_file):
+    df = pd.read_csv(data_file)
+    df['Date'] = pd.to_datetime(df['Date'])
+else:
+    df = pd.DataFrame(columns=['Date', 'Age_Days', 'Weight_kg'])
+
+# Load WHO data
+who_data_file = os.environ.get('WHO_DATA_FILE', 'data/tab_wfa_girls_p_0_13.xlsx')
+who_data = pd.read_excel(who_data_file)
+
+# Process the data to get the percentiles you need
+percentiles = {
+    '5th': who_data['P5'].tolist(),
+    '10th': who_data['P10'].tolist(),
+    '50th': who_data['P50'].tolist(),
+    '90th': who_data['P90'].tolist(),
+    '95th': who_data['P95'].tolist(),
+}
+
+days = (who_data['Week']*7).tolist()
+
+app.layout = html.Div([
+    html.H1("Baby Growth Tracker for Female Infants (WHO Standards)"),
+    
+    html.Div([
+        html.Label("Date of Birth:"),
+        dcc.DatePickerSingle(id='dob-picker', date=datetime.now().date() - timedelta(days=14)),
+        
+        html.Label("Date of Measurement:"),
+        dcc.DatePickerSingle(id='date-picker', date=datetime.now().date()),
+        
+        html.Label("Weight (kg):"),
+        dcc.Input(id='weight-input', type='number', placeholder='Enter weight in kg'),
+        
+        html.Button('Add Record', id='add-button', n_clicks=0)
+    ]),
+    
+    html.Div(id='record-added-message'),
+    
+    dcc.Graph(id='growth-chart'),
+    
+    dash_table.DataTable(
+        id='data-table',
+        columns=[
+            {'name': 'Date', 'id': 'Date', 'type': 'datetime'},
+            {'name': 'Age (Days)', 'id': 'Age_Days', 'type': 'numeric'},
+            {'name': 'Weight (kg)', 'id': 'Weight_kg', 'type': 'numeric'}
+        ],
+        data=df.to_dict('records'),
+        editable=True,
+        row_deletable=True
+    ),
+    
+    html.Button('Save Changes', id='save-button', n_clicks=0)
+])
+
+@app.callback(
+    Output('record-added-message', 'children'),
+    Output('growth-chart', 'figure'),
+    Output('data-table', 'data'),
+    Input('add-button', 'n_clicks'),
+    Input('save-button', 'n_clicks'),
+    Input('data-table', 'data'),
+    State('dob-picker', 'date'),
+    State('date-picker', 'date'),
+    State('weight-input', 'value')
+)
+def update_data_and_chart(add_clicks, save_clicks, table_data, dob, date, weight):
+    global df
+    ctx = dash.callback_context
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    if trigger_id == 'add-button' and dob and date and weight is not None:
+        dob = datetime.strptime(dob, '%Y-%m-%d')
+        measurement_date = datetime.strptime(date, '%Y-%m-%d')
+        age_days = (measurement_date - dob).days
+        
+        new_record = pd.DataFrame({'Date': [measurement_date], 'Age_Days': [age_days], 'Weight_kg': [weight]})
+        df = pd.concat([df, new_record], ignore_index=True)
+        df.to_csv(data_file, index=False)
+        message = "Record added successfully!"
+    elif trigger_id == 'save-button' or trigger_id == 'data-table':
+        df = pd.DataFrame(table_data)
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.to_csv(data_file, index=False)
+        message = "Changes saved successfully!"
+    else:
+        message = "No changes made."
+    
+    fig = update_chart()
+    return message, fig, df.to_dict('records')
+
+def update_chart():
+    fig = go.Figure()
+    
+    # Fill between 5th and 95th percentile with light grey
+    fig.add_trace(go.Scatter(
+        x=days + days[::-1],
+        y=percentiles['95th'] + percentiles['5th'][::-1],
+        fill='toself',
+        fillcolor='rgba(200,200,200,0.3)',
+        line=dict(color='rgba(255,255,255,0)'),
+        hoverinfo="skip",
+        showlegend=False
+    ))
+
+    # Fill between 10th and 90th percentile with darker grey
+    fig.add_trace(go.Scatter(
+        x=days + days[::-1],
+        y=percentiles['90th'] + percentiles['10th'][::-1],
+        fill='toself',
+        fillcolor='rgba(150,150,150,0.3)',
+        line=dict(color='rgba(255,255,255,0)'),
+        hoverinfo="skip",
+        showlegend=False
+    ))
+    
+    # Add percentile lines
+    for percentile, weights in percentiles.items():
+        fig.add_trace(go.Scatter(
+            x=days,
+            y=weights,
+            mode='lines',
+            name=f'{percentile} Percentile',
+            line=dict(color='rgba(0,0,0,0.5)', width=1)
+        ))
+    
+    if not df.empty:
+        fig.add_trace(go.Scatter(
+            x=df['Age_Days'],
+            y=df['Weight_kg'],
+            mode='lines+markers',
+            line=dict(color='red', width=2),
+            marker=dict(size=6),
+            name="Baby's Growth"
+        ))
+    
+    fig.update_layout(
+        title='Baby Growth Chart for Female Infants (WHO Standards)',
+        xaxis_title='Age (days)',
+        yaxis_title='Weight (kg)',
+        legend=dict(y=0.5, traceorder='reversed', font_size=16),
+        hovermode='x unified'
+    )
+    
+    return fig
+
+if __name__ == '__main__':
+    app.run_server(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
