@@ -6,9 +6,13 @@ from datetime import datetime, timedelta
 import os
 
 app = dash.Dash(__name__)
-server = app.server  # Add this line for deployment
 
-# Use environment variable for data file path, with a default
+server = app.server
+
+data_dir = 'data'
+if not os.path.exists(data_dir):
+    os.makedirs(data_dir)
+
 data_file = os.path.join(data_dir, 'baby_growth_data.csv')
 if os.path.exists(data_file):
     df = pd.read_csv(data_file)
@@ -26,7 +30,7 @@ percentiles = {
     '10th': who_data['P10'].tolist(),
     '50th': who_data['P50'].tolist(),
     '90th': who_data['P90'].tolist(),
-    '95th': who_data['P95'].tolist(),
+    '95th': who_data['P95'].tolist(),g
 }
 
 days = (who_data['Week']*7).tolist()
