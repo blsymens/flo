@@ -21,8 +21,8 @@ else:
     df = pd.DataFrame(columns=['Date', 'Age_Days', 'Weight_kg'])
 
 # Load WHO data
-data_file = os.path.join(data_dir, 'tab_wfa_girls_p_0_13.xlsx')
-who_data = pd.read_excel(data_file)
+data_file = os.path.join(data_dir, 'tab_wfa_girls_p_0_13.csv')
+who_data = pd.read_csv(data_file)
 
 # Process the data to get the percentiles you need
 percentiles = {
