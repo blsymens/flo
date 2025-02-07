@@ -47,11 +47,11 @@ who_data = read_csv_from_blob(who_data_blob,sep=';')
 
 # Process the data to get the percentiles you need
 percentiles = {
-    '5th': who_data['P5'].tolist(),
-    '10th': who_data['P10'].tolist(),
-    '50th': who_data['P50'].tolist(),
-    '90th': who_data['P90'].tolist(),
-    '95th': who_data['P95'].tolist()
+    '5th': pd.to_numeric(who_data['P5'].str.replace(',', '.'), errors='coerce').tolist(),
+    '10th': pd.to_numeric(who_data['P10'].str.replace(',', '.'), errors='coerce').tolist(),
+    '50th': pd.to_numeric(who_data['P50'].str.replace(',', '.'), errors='coerce').tolist(),
+    '90th': pd.to_numeric(who_data['P90'].str.replace(',', '.'), errors='coerce').tolist(),
+    '95th': pd.to_numeric(who_data['P95'].str.replace(',', '.'), errors='coerce').tolist()
 }
 
 days = (who_data['Week']*7).tolist()
