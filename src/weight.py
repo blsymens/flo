@@ -23,6 +23,13 @@ container_client = blob_service_client.get_container_client(container_name)
 def read_csv_from_blob(blob_name,sep=','):
     blob_client = container_client.get_blob_client(blob_name)
     download_stream = blob_client.download_blob()
+
+    # Convert numeric columns to float
+    numeric_columns = ['Weight_kg', 'P5', 'P10', 'P50', 'P90', 'P95']
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col].str.replace(',', '.'), errors='coerce')
+            
     return pd.read_csv(io.StringIO(download_stream.content_as_text()),sep=sep)
 
 # Function to write CSV to Azure Blob Storage
@@ -176,6 +183,7 @@ def update_chart():
         title='Baby Growth Chart for Female Infants (WHO Standards)',
         xaxis_title='Age (days)',
         yaxis_title='Weight (kg)',
+        showlegend=False, 
         legend=dict(y=0.5, traceorder='reversed', font_size=16),
         hovermode='x unified'
     )
