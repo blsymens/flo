@@ -34,8 +34,8 @@ def write_csv_to_blob(df, blob_name):
     blob_client.upload_blob(output.getvalue(), overwrite=True)
 
 # Load data
-baby_growth_blob = 'data/baby_growth_data.csv'
-who_data_blob = 'data/tab_wfa_girls_p_0_13.csv'
+baby_growth_blob = 'baby_growth_data.csv'
+who_data_blob = 'tab_wfa_girls_p_0_13.csv'
 
 try:
     df = read_csv_from_blob(baby_growth_blob)
