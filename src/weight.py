@@ -43,7 +43,7 @@ try:
 except:
     df = pd.DataFrame(columns=['Date', 'Age_Days', 'Weight_kg'])
 
-who_data = read_csv_from_blob(who_data_blob)
+who_data = read_csv_from_blob(who_data_blob,sep=';')
 
 # Process the data to get the percentiles you need
 percentiles = {
