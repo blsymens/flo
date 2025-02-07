@@ -20,17 +20,18 @@ blob_service_client = BlobServiceClient.from_connection_string(connection_string
 container_client = blob_service_client.get_container_client(container_name)
 
 # Function to read CSV from Azure Blob Storage
-def read_csv_from_blob(blob_name,sep=','):
+def read_csv_from_blob(blob_name, sep=','):
     blob_client = container_client.get_blob_client(blob_name)
     download_stream = blob_client.download_blob()
-
+    df = pd.read_csv(io.StringIO(download_stream.content_as_text()), sep=sep)
+    
     # Convert numeric columns to float
-    numeric_columns = ['Weight_kg', 'P5', 'P10', 'P50', 'P90', 'P95']
+    numeric_columns = ['P5', 'P10', 'P50', 'P90', 'P95']
     for col in numeric_columns:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col].str.replace(',', '.'), errors='coerce')
-            
-    return pd.read_csv(io.StringIO(download_stream.content_as_text()),sep=sep)
+    
+    return df
 
 # Function to write CSV to Azure Blob Storage
 def write_csv_to_blob(df, blob_name):
@@ -44,21 +45,19 @@ def write_csv_to_blob(df, blob_name):
 baby_growth_blob = 'baby_growth_data.csv'
 who_data_blob = 'tab_wfa_girls_p_0_13.csv'
 
-try:
-    df = read_csv_from_blob(baby_growth_blob)
-    df['Date'] = pd.to_datetime(df['Date'])
-except:
-    df = pd.DataFrame(columns=['Date', 'Age_Days', 'Weight_kg'])
+# Load initial data
+initial_df = read_csv_from_blob(baby_growth_blob)
+initial_df['Date'] = pd.to_datetime(initial_df['Date'])
 
-who_data = read_csv_from_blob(who_data_blob,sep=';')
+who_data = read_csv_from_blob(who_data_blob, sep=';')
 
 # Process the data to get the percentiles you need
 percentiles = {
-    '5th': pd.to_numeric(who_data['P5'].str.replace(',', '.'), errors='coerce').tolist(),
-    '10th': pd.to_numeric(who_data['P10'].str.replace(',', '.'), errors='coerce').tolist(),
-    '50th': pd.to_numeric(who_data['P50'].str.replace(',', '.'), errors='coerce').tolist(),
-    '90th': pd.to_numeric(who_data['P90'].str.replace(',', '.'), errors='coerce').tolist(),
-    '95th': pd.to_numeric(who_data['P95'].str.replace(',', '.'), errors='coerce').tolist()
+    '5th': who_data['P5'].tolist(),
+    '10th': who_data['P10'].tolist(),
+    '50th': who_data['P50'].tolist(),
+    '90th': who_data['P90'].tolist(),
+    '95th': who_data['P95'].tolist()
 }
 
 days = (who_data['Week']*7).tolist()
@@ -90,7 +89,7 @@ app.layout = html.Div([
             {'name': 'Age (Days)', 'id': 'Age_Days', 'type': 'numeric'},
             {'name': 'Weight (kg)', 'id': 'Weight_kg', 'type': 'numeric'}
         ],
-        data=df.to_dict('records'),
+        data=initial_df.to_dict('records'),
         editable=True,
         row_deletable=True
     ),
@@ -110,9 +109,12 @@ app.layout = html.Div([
     State('weight-input', 'value')
 )
 def update_data_and_chart(add_clicks, save_clicks, table_data, dob, date, weight):
-    global df
     ctx = dash.callback_context
     trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Load data from Azure Blob Storage
+    df = read_csv_from_blob(baby_growth_blob)
+    df['Date'] = pd.to_datetime(df['Date'])
     
     if trigger_id == 'add-button' and dob and date and weight is not None:
         dob = datetime.strptime(dob, '%Y-%m-%d')
@@ -131,10 +133,10 @@ def update_data_and_chart(add_clicks, save_clicks, table_data, dob, date, weight
     else:
         message = "No changes made."
     
-    fig = update_chart()
+    fig = update_chart(df)
     return message, fig, df.to_dict('records')
 
-def update_chart():
+def update_chart(df):
     fig = go.Figure()
     
     # Fill between 5th and 95th percentile with light grey
@@ -166,7 +168,8 @@ def update_chart():
             y=weights,
             mode='lines',
             name=f'{percentile} Percentile',
-            line=dict(color='rgba(0,0,0,0.5)', width=1)
+            line=dict(color='rgba(0,0,0,0.5)', width=1),
+            showlegend=False
         ))
     
     if not df.empty:
@@ -176,15 +179,15 @@ def update_chart():
             mode='lines+markers',
             line=dict(color='red', width=2),
             marker=dict(size=6),
-            name="Baby's Growth"
+            name="Baby's Growth",
+            showlegend=False
         ))
     
     fig.update_layout(
         title='Baby Growth Chart for Female Infants (WHO Standards)',
         xaxis_title='Age (days)',
         yaxis_title='Weight (kg)',
-        showlegend=False, 
-        legend=dict(y=0.5, traceorder='reversed', font_size=16),
+        showlegend=False,
         hovermode='x unified'
     )
     
